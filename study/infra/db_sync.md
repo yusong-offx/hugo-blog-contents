@@ -8,7 +8,6 @@ categories:
 tags:
 		- pulsar
 		- cdc
-		- scylladb
 		- postgresql
 		- wal
 		- data-pipeline
@@ -30,75 +29,21 @@ Pulsar CDC 흐름은 아래와 같이 구성됩니다.
 
 Pulsar는 Debezium 기반의 `pulsar-io-debezium-postgres` 소스 커넥터를 제공합니다. 이 커넥터는 PostgreSQL의 WAL을 logical decoding 슬롯을 통해 스트리밍하고, 테이블 단위로 변경 이벤트를 발행합니다.
 
-### 준비 사항
+### 실습 예제
 
-- PostgreSQL 10 이상, logical replication 활성화
-- `wal_level = logical`, `max_replication_slots` 및 `max_wal_senders` 적절히 설정
-- Pulsar 클러스터 및 `pulsar-admin` CLI 접근 권한
+PostgreSQL WAL에 Pulsar CDC 커넥터를 연결하여 실시간 변경 이벤트를 추적하는 예제 프로젝트입니다.
 
-### 커넥터 설정 예시
+- [cdc-tracer](https://github.com/yusong-offx/cdc-tracer): PostgreSQL WAL + Pulsar CDC 커넥터 테스트 레포지토리
 
-```bash
-pulsar-admin sources create \
-	--archive connectors/pulsar-io-debezium-postgres-3.1.1.nar \
-	--tenant study \
-	--namespace infra \
-	--name postgres-cdc \
-	--destination-topic-name persistent://study/infra/postgres-wal \
-	--parallelism 1 \
-	--source-config '{
-		"database.hostname": "postgres.staging.svc",
-		"database.port": "5432",
-		"database.user": "cdc_user",
-		"database.password": "***",
-		"database.dbname": "app",
-		"database.server.name": "postgres-app",
-		"slot.name": "pulsar_slot",
-		"plugin.name": "pgoutput",
-		"schema.include.list": "public",
-		"table.include.list": "public.orders,public.order_items",
-		"snapshot.mode": "initial",
-		"pulsar.service.url": "pulsar://broker-0.pulsar.svc:6650"
-	}'
-```
 
 커넥터는 Debezium 포맷을 유지하며 `key`에는 기본 키, `value`에는 `before/after` 필드가 포함된 JSON 이벤트를 기록합니다. 스키마 레지스트리를 사용하면 스키마 변경도 자동 추적할 수 있습니다.
 
 ## 3. ScyllaDB CDC 연동
 
-ScyllaDB는 4.0 이상에서 CDC를 제공하여 테이블 별 변경 로그를 스트리밍할 수 있습니다. Pulsar에서는 두 가지 접근이 일반적입니다.
+[ScyllaDB CDC Source Connector](https://docs.scylladb.com/manual/stable/using-scylla/integrations/scylla-cdc-source-connector.html)
 
-- **Scylla CDC Pulsar Source**: `scylla-cdc-java` 기반 오픈소스 커넥터를 사용하여 CDC 로그 테이블을 읽고 Pulsar 토픽으로 전송
-- **Kafka 호환 모드 활용**: Scylla CDC → Kafka Connect → Pulsar Kafka-on-Pulsar(GoP) 브릿지를 사용하는 방식 (운영 간소화를 위해 전자를 추천)
 
-### 커넥터 설정 예시 (scylla-cdc-source)
 
-```bash
-pulsar-admin sources create \
-	--archive connectors/pulsar-io-scylla-cdc-1.0.0.nar \
-	--tenant study \
-	--namespace infra \
-	--name scylla-orders-cdc \
-	--destination-topic-name persistent://study/infra/scylla-orders \
-	--parallelism 2 \
-	--source-config '{
-		"scylla.contact.points": "scylla-0.scylla.svc:9042,scylla-1.scylla.svc:9042",
-		"scylla.keyspace": "app",
-		"scylla.table": "orders",
-		"scylla.username": "cdc_user",
-		"scylla.password": "***",
-		"pulsar.service.url": "pulsar://broker-0.pulsar.svc:6650",
-		"cursor.initial": "latest"
-	}'
-```
-
-Scylla CDC 이벤트는 파티션 키 기준으로 정렬된 스트림이므로 Pulsar 토픽을 KeyShared 모드로 구독하면 순서를 유지하며 확장이 가능합니다.
-
-## 4. 타겟 시스템 동기화 전략
-
-- sink 단에서 멱등 처리를 위해 이벤트 헤더의 `eventType`(create/update/delete)와 `op_ts`(operation timestamp)를 활용하거나, Pulsar 메시지 ID를 별도 테이블에 저장해 재처리를 방지합니다.
-
-- 해당 schema를 읽거나 해서 원하는 방향으로 데이터 처리를 할 수 있습니다.
 
 ## 참고
 
