@@ -136,4 +136,3 @@ flowchart LR
 	class POSTGRES_STS,SCYLLA_STS,PULSAR_CLUSTER,MEMCACHE_DEP data
 	class ROOK_OP,CEPH_CLUSTER storage
 ```
-
